@@ -101,6 +101,14 @@ README 내용...
 
 `approve`가 성공하면 GitHub branch를 만들고 `data/extensions.json`에 현재 draft를 append한 뒤 pull request를 생성합니다.
 
+배포 health URL 확인:
+
+```text
+@bot health
+```
+
+응답에는 현재 요청 기준으로 확인한 `/health` URL이 포함됩니다.
+
 명령어 확인:
 
 ```text

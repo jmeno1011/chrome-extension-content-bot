@@ -113,6 +113,7 @@ export function createApp(dependencies: AppDependencies = {}) {
     try {
       const text = await createCommandReply({
         command,
+        request,
         threadTs,
         draftContexts,
         generateDraft,
@@ -152,15 +153,20 @@ function parseMentionCommand(text: string): { name: string; argument: string } {
 
 async function createCommandReply(input: {
   command: { name: string; argument: string };
+  request: RequestWithRawBody;
   threadTs: string;
   draftContexts: Map<string, DraftContext>;
   generateDraft: (readme: string) => Promise<AiOutput>;
   createPullRequest: (extension: Extension) => Promise<{ url: string }>;
 }): Promise<string> {
-  const { command, threadTs, draftContexts, generateDraft, createPullRequest } = input;
+  const { command, request, threadTs, draftContexts, generateDraft, createPullRequest } = input;
 
   if (command.name === "/h" || command.name === "help") {
     return createHelpReply();
+  }
+
+  if (command.name === "health" || command.name === "check_health") {
+    return createHealthReply(request);
   }
 
   if (command.name === "generate") {
@@ -279,10 +285,30 @@ function createHelpReply(): string {
     "`@bot edit_category Productivity`: category 덮어쓰기",
     "`@bot preview`: 현재 thread draft 다시 보기",
     "`@bot approve`: 최종 schema 검증 후 승인",
+    "`@bot health`: 배포 health URL 확인",
     "`@bot /h`: 명령어 보기",
     "",
     "참고: `add_github`, `add_chrome`은 기존 값이 비어 있을 때만 추가합니다. 덮어쓰기는 `edit_*`를 사용합니다.",
   ].join("\n");
+}
+
+function createHealthReply(request: RequestWithRawBody): string {
+  const healthUrl = `${getPublicOrigin(request)}/health`;
+
+  return ["Health check OK", "", `Checked URL: ${healthUrl}`].join("\n");
+}
+
+function getPublicOrigin(request: RequestWithRawBody): string {
+  const forwardedProto = firstHeaderValue(request.header("x-forwarded-proto"));
+  const forwardedHost = firstHeaderValue(request.header("x-forwarded-host"));
+  const protocol = forwardedProto ?? request.protocol ?? "https";
+  const host = forwardedHost ?? request.header("host") ?? "localhost";
+
+  return `${protocol}://${host}`;
+}
+
+function firstHeaderValue(value: string | undefined): string | undefined {
+  return value?.split(",")[0]?.trim();
 }
 
 function createAddUrlReply(input: {

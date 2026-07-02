@@ -159,6 +159,39 @@ describe("Slack events endpoint", () => {
     expect(postMessage.mock.calls[0][0].text).toContain("generate");
   });
 
+  it("shows health check status and the checked URL", async () => {
+    const postMessage = vi.fn().mockResolvedValue(undefined);
+    const app = createApp({
+      slack: { postMessage },
+      verifySlackRequest: () => true,
+    });
+
+    const response = await request(app)
+      .post("/api/slack/events")
+      .set("x-forwarded-proto", "https")
+      .set("x-forwarded-host", "chrome-extension-content-bot.vercel.app")
+      .send({
+        type: "event_callback",
+        event: {
+          type: "app_mention",
+          channel: "C123",
+          user: "U123",
+          text: "<@BOT> health",
+          ts: "1710000000.000260",
+        },
+      });
+
+    expect(response.status).toBe(200);
+    expect(postMessage).toHaveBeenCalledWith({
+      channel: "C123",
+      thread_ts: "1710000000.000260",
+      text: expect.stringContaining("Health check OK"),
+    });
+    expect(postMessage.mock.calls[0][0].text).toContain(
+      "https://chrome-extension-content-bot.vercel.app/health",
+    );
+  });
+
   it("adds github URL to the current thread draft when empty", async () => {
     const postMessage = vi.fn().mockResolvedValue(undefined);
     const generateDraft = vi.fn().mockResolvedValue(baseDraft);
