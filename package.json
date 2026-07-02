@@ -15,7 +15,6 @@
   "license": "MIT",
   "type": "module",
   "dependencies": {
-    "@slack/web-api": "^7.18.0",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "openai": "^6.45.0",

@@ -37,7 +37,7 @@ describe("Slack events endpoint", () => {
       },
     },
     missingFields: ["chromeStore"],
-    questions: ["Chrome Web Store URL이 있나요?"],
+    questions: ["Is there a Chrome Web Store URL?"],
   };
 
   it("starts without Slack credentials for health checks", async () => {
@@ -89,7 +89,7 @@ describe("Slack events endpoint", () => {
     expect(response.body).toEqual({ ok: true });
     expect(postMessage).toHaveBeenCalledWith({
       channel: "C123",
-      text: "연결 확인 완료: README를 보내주면 다음 단계에서 구조화 데이터를 만들게요.",
+      text: "Connection confirmed. Send a README and I will generate structured data.",
       thread_ts: "1710000000.000100",
     });
   });
@@ -121,12 +121,12 @@ describe("Slack events endpoint", () => {
     expect(postMessage).toHaveBeenCalledWith({
       channel: "C123",
       thread_ts: "1710000000.000200",
-      text: expect.stringContaining("구조화 데이터 생성 완료"),
+      text: expect.stringContaining("Structured data generated"),
     });
     expect(postMessage.mock.calls[0][0].text).toContain("```");
     expect(postMessage.mock.calls[0][0].text).toContain("\"slug\": \"my-extension\"");
     expect(postMessage.mock.calls[0][0].text).toContain("missingFields");
-    expect(postMessage.mock.calls[0][0].text).toContain("Chrome Web Store URL이 있나요?");
+    expect(postMessage.mock.calls[0][0].text).toContain("Is there a Chrome Web Store URL?");
   });
 
   it("shows command help with /h", async () => {
@@ -233,7 +233,7 @@ describe("Slack events endpoint", () => {
     expect(postMessage).toHaveBeenCalledWith({
       channel: "C123",
       thread_ts: "1710000000.000400",
-      text: expect.stringContaining("github 값을 추가했습니다"),
+      text: expect.stringContaining("github value added"),
     });
     expect(postMessage.mock.calls[0][0].text).toContain(
       "\"github\": \"https://github.com/example/my-extension\"",
@@ -289,7 +289,7 @@ describe("Slack events endpoint", () => {
     expect(postMessage).toHaveBeenCalledWith({
       channel: "C123",
       thread_ts: "1710000000.000500",
-      text: expect.stringContaining("이미 chromeStore 값이 있습니다"),
+      text: expect.stringContaining("chromeStore already has a value"),
     });
     expect(postMessage.mock.calls[0][0].text).toContain(
       "https://chromewebstore.google.com/detail/existing/abcdef",
@@ -345,7 +345,7 @@ describe("Slack events endpoint", () => {
     expect(postMessage).toHaveBeenCalledWith({
       channel: "C123",
       thread_ts: "1710000000.000600",
-      text: expect.stringContaining("github 값을 수정했습니다"),
+      text: expect.stringContaining("github value updated"),
     });
     expect(postMessage.mock.calls[0][0].text).toContain(
       "\"github\": \"https://github.com/example/new-extension\"",
@@ -402,7 +402,7 @@ describe("Slack events endpoint", () => {
     expect(postMessage).toHaveBeenCalledWith({
       channel: "C123",
       thread_ts: "1710000000.000700",
-      text: expect.stringContaining("chromeStore 값을 수정했습니다"),
+      text: expect.stringContaining("chromeStore value updated"),
     });
     expect(postMessage.mock.calls[0][0].text).toContain(
       "\"chromeStore\": \"https://chromewebstore.google.com/detail/new/xyz\"",
@@ -459,7 +459,7 @@ describe("Slack events endpoint", () => {
     expect(postMessage).toHaveBeenCalledWith({
       channel: "C123",
       thread_ts: "1710000000.000800",
-      text: expect.stringContaining("category 값을 추가했습니다"),
+      text: expect.stringContaining("category value added"),
     });
     expect(postMessage.mock.calls[0][0].text).toContain("\"category\": \"Automation Tool\"");
     expect(postMessage.mock.calls[0][0].text).not.toContain("- category");
@@ -506,7 +506,7 @@ describe("Slack events endpoint", () => {
     expect(postMessage).toHaveBeenCalledWith({
       channel: "C123",
       thread_ts: "1710000000.000900",
-      text: expect.stringContaining("category 값을 수정했습니다"),
+      text: expect.stringContaining("category value updated"),
     });
     expect(postMessage.mock.calls[0][0].text).toContain("\"category\": \"Automation Tool\"");
     expect(postMessage.mock.calls[0][0].text).not.toContain("\"category\": \"Productivity\"");
@@ -603,7 +603,7 @@ describe("Slack events endpoint", () => {
     expect(postMessage).toHaveBeenCalledWith({
       channel: "C123",
       thread_ts: "1710000000.001100",
-      text: expect.stringContaining("승인 완료"),
+      text: expect.stringContaining("Approval complete"),
     });
     expect(postMessage.mock.calls[0][0].text).toContain(
       "https://github.com/example/extensions/pull/123",
@@ -662,7 +662,7 @@ describe("Slack events endpoint", () => {
     expect(postMessage).toHaveBeenCalledWith({
       channel: "C123",
       thread_ts: "1710000000.001200",
-      text: expect.stringContaining("승인할 수 없습니다"),
+      text: expect.stringContaining("Cannot approve"),
     });
     expect(postMessage.mock.calls[0][0].text).toContain("category");
   });

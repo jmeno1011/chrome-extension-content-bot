@@ -1,5 +1,3 @@
-import { WebClient } from "@slack/web-api";
-
 export type SlackPostMessage = {
   channel: string;
   text: string;
@@ -19,11 +17,21 @@ export function createSlackClient(token: string | undefined): SlackClient {
     };
   }
 
-  const client = new WebClient(token);
-
   return {
     async postMessage(message) {
-      await client.chat.postMessage(message);
+      const response = await fetch("https://slack.com/api/chat.postMessage", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json; charset=utf-8",
+        },
+        body: JSON.stringify(message),
+      });
+      const body = (await response.json()) as { ok?: boolean; error?: string };
+
+      if (!response.ok || !body.ok) {
+        throw new Error(`Slack postMessage failed: ${body.error ?? response.statusText}`);
+      }
     },
   };
 }

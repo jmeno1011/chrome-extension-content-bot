@@ -1,8 +1,5 @@
 import express, { type Request } from "express";
-import { OpenAI } from "openai";
 import { loadConfig } from "./config.js";
-import { createExtensionPullRequest } from "./github/create-extension-pr.js";
-import { generateExtensionDraft } from "./openai/generate-extension-draft.js";
 import type { AiOutput } from "./schema/ai-output.schema.js";
 import { extensionSchema, type Extension } from "./schema/extension.schema.js";
 import { createSlackClient, type SlackClient } from "./slack/client.js";
@@ -35,6 +32,11 @@ export function createApp(dependencies: AppDependencies = {}) {
         throw new Error("OPENAI_API_KEY is required");
       }
 
+      const [{ OpenAI }, { generateExtensionDraft }] = await Promise.all([
+        import("openai"),
+        import("./openai/generate-extension-draft.js"),
+      ]);
+
       return generateExtensionDraft({
         readme,
         contactEmail: config.contactEmail,
@@ -48,6 +50,8 @@ export function createApp(dependencies: AppDependencies = {}) {
       if (!config.githubToken || !config.githubOwner || !config.githubRepo) {
         throw new Error("GITHUB_TOKEN, GITHUB_OWNER, and GITHUB_REPO are required");
       }
+
+      const { createExtensionPullRequest } = await import("./github/create-extension-pr.js");
 
       return createExtensionPullRequest({
         extension,
@@ -243,7 +247,7 @@ async function createCommandReply(input: {
     return createApproveReply(draftContexts.get(threadTs), createPullRequest);
   }
 
-  return "연결 확인 완료: README를 보내주면 다음 단계에서 구조화 데이터를 만들게요.";
+  return "Connection confirmed. Send a README and I will generate structured data.";
 }
 
 async function createGenerateReply(
@@ -253,12 +257,12 @@ async function createGenerateReply(
 ): Promise<string> {
   if (!readme) {
     return [
-      "README 내용을 같이 보내주세요.",
+      "Please include README content.",
       "",
-      "예:",
+      "Example:",
       "@bot generate",
       "# My Chrome Extension",
-      "README 내용...",
+      "README content...",
     ].join("\n");
   }
 
@@ -268,27 +272,27 @@ async function createGenerateReply(
     return formatDraftPreview(draft);
   } catch (error) {
     console.error("[slack] generate failed", error);
-    return "구조화 데이터 생성에 실패했습니다. 서버 로그를 확인해주세요.";
+    return "Failed to generate structured data. Check the server logs.";
   }
 }
 
 function createHelpReply(): string {
   return [
-    "사용 가능한 명령어",
+    "Available commands",
     "",
-    "`@bot generate` + README 내용: 구조화 JSON preview 생성",
-    "`@bot add_github https://github.com/owner/repo`: 현재 thread draft에 GitHub URL 추가",
-    "`@bot add_chrome https://chromewebstore.google.com/detail/...`: 현재 thread draft에 Chrome Store URL 추가",
-    "`@bot edit_github https://github.com/owner/repo`: GitHub URL 덮어쓰기",
-    "`@bot edit_chrome https://chromewebstore.google.com/detail/...`: Chrome Store URL 덮어쓰기",
-    "`@bot add_category Automation Tool`: category가 비어 있을 때 추가",
-    "`@bot edit_category Productivity`: category 덮어쓰기",
-    "`@bot preview`: 현재 thread draft 다시 보기",
-    "`@bot approve`: 최종 schema 검증 후 승인",
-    "`@bot health`: 배포 health URL 확인",
-    "`@bot /h`: 명령어 보기",
+    "`@bot generate` + README content: generate a structured JSON preview",
+    "`@bot add_github https://github.com/owner/repo`: add a GitHub URL to the current thread draft",
+    "`@bot add_chrome https://chromewebstore.google.com/detail/...`: add a Chrome Store URL to the current thread draft",
+    "`@bot edit_github https://github.com/owner/repo`: overwrite the GitHub URL",
+    "`@bot edit_chrome https://chromewebstore.google.com/detail/...`: overwrite the Chrome Store URL",
+    "`@bot add_category Automation Tool`: add category when empty",
+    "`@bot edit_category Productivity`: overwrite category",
+    "`@bot preview`: show the current thread draft",
+    "`@bot approve`: validate final schema and create a PR",
+    "`@bot health`: show deployment health URL",
+    "`@bot /h`: show commands",
     "",
-    "참고: `add_github`, `add_chrome`은 기존 값이 비어 있을 때만 추가합니다. 덮어쓰기는 `edit_*`를 사용합니다.",
+    "Note: `add_github` and `add_chrome` only add values when the existing value is empty. Use `edit_*` to overwrite.",
   ].join("\n");
 }
 
@@ -322,16 +326,16 @@ function createAddUrlReply(input: {
   const { context, field, label, url, validator, overwrite } = input;
 
   if (!context) {
-    return "현재 thread에 draft가 없습니다. 먼저 `@bot generate`로 README를 처리해주세요.";
+    return "No draft exists in this thread. Run `@bot generate` with a README first.";
   }
 
   if (!url || !validator(url)) {
-    return `${label} URL 형식이 올바르지 않습니다. 값을 확인해서 다시 보내주세요.`;
+    return `${label} URL format is invalid. Check the value and try again.`;
   }
 
   const currentValue = context.draft.extension[field];
   if (currentValue && !overwrite) {
-    return [`이미 ${label} 값이 있습니다.`, "", currentValue].join("\n");
+    return [`${label} already has a value.`, "", currentValue].join("\n");
   }
 
   context.draft = {
@@ -343,8 +347,8 @@ function createAddUrlReply(input: {
     missingFields: context.draft.missingFields.filter((missingField) => missingField !== field),
   };
 
-  const action = currentValue ? "수정했습니다" : "추가했습니다";
-  return [`${label} 값을 ${action}.`, "", formatDraftPreview(context.draft)].join("\n");
+  const action = currentValue ? "updated" : "added";
+  return [`${label} value ${action}.`, "", formatDraftPreview(context.draft)].join("\n");
 }
 
 function createCategoryReply(input: {
@@ -355,16 +359,16 @@ function createCategoryReply(input: {
   const { context, category, overwrite } = input;
 
   if (!context) {
-    return "현재 thread에 draft가 없습니다. 먼저 `@bot generate`로 README를 처리해주세요.";
+    return "No draft exists in this thread. Run `@bot generate` with a README first.";
   }
 
   if (!category.trim()) {
-    return "category 값을 같이 보내주세요. 예: `@bot add_category Automation Tool`";
+    return "Please include a category value. Example: `@bot add_category Automation Tool`";
   }
 
   const currentValue = context.draft.extension.category;
   if (currentValue && !overwrite) {
-    return [`이미 category 값이 있습니다.`, "", currentValue].join("\n");
+    return ["category already has a value.", "", currentValue].join("\n");
   }
 
   context.draft = {
@@ -376,13 +380,13 @@ function createCategoryReply(input: {
     missingFields: context.draft.missingFields.filter((missingField) => missingField !== "category"),
   };
 
-  const action = currentValue ? "수정했습니다" : "추가했습니다";
-  return [`category 값을 ${action}.`, "", formatDraftPreview(context.draft)].join("\n");
+  const action = currentValue ? "updated" : "added";
+  return [`category value ${action}.`, "", formatDraftPreview(context.draft)].join("\n");
 }
 
 function createPreviewReply(context: DraftContext | undefined): string {
   if (!context) {
-    return "현재 thread에 draft가 없습니다. 먼저 `@bot generate`로 README를 처리해주세요.";
+    return "No draft exists in this thread. Run `@bot generate` with a README first.";
   }
 
   return formatDraftPreview(context.draft);
@@ -393,7 +397,7 @@ async function createApproveReply(
   createPullRequest: (extension: Extension) => Promise<{ url: string }>,
 ): Promise<string> {
   if (!context) {
-    return "현재 thread에 draft가 없습니다. 먼저 `@bot generate`로 README를 처리해주세요.";
+    return "No draft exists in this thread. Run `@bot generate` with a README first.";
   }
 
   const result = extensionSchema.safeParse(context.draft.extension);
@@ -403,22 +407,22 @@ async function createApproveReply(
       return `- ${path || "extension"}: ${issue.message}`;
     });
 
-    return ["승인할 수 없습니다. 아래 필드를 먼저 보완해주세요.", "", ...issues].join("\n");
+    return ["Cannot approve. Fix these fields first.", "", ...issues].join("\n");
   }
 
   try {
     const pullRequest = await createPullRequest(result.data);
     return [
-      "승인 완료",
+      "Approval complete",
       "",
-      "GitHub PR을 생성했습니다.",
+      "Created a GitHub PR.",
       pullRequest.url,
       "",
       formatDraftPreview(context.draft),
     ].join("\n");
   } catch (error) {
     console.error("[github] pull request creation failed", error);
-    return "승인은 통과했지만 GitHub PR 생성에 실패했습니다. 서버 로그와 GitHub 환경변수를 확인해주세요.";
+    return "Approval passed, but GitHub PR creation failed. Check server logs and GitHub environment variables.";
   }
 }
 
@@ -426,14 +430,14 @@ function formatDraftPreview(draft: AiOutput): string {
   const missingFields =
     draft.missingFields.length > 0
       ? ["missingFields:", ...draft.missingFields.map((field) => `- ${field}`)].join("\n")
-      : "missingFields: 없음";
+      : "missingFields: none";
   const questions =
     draft.questions.length > 0
       ? ["questions:", ...draft.questions.map((question) => `- ${question}`)].join("\n")
-      : "questions: 없음";
+      : "questions: none";
   const json = JSON.stringify(draft, null, 2);
 
-  return ["구조화 데이터 생성 완료", "", missingFields, "", questions, "", "```", json, "```"].join(
+  return ["Structured data generated", "", missingFields, "", questions, "", "```", json, "```"].join(
     "\n",
   );
 }

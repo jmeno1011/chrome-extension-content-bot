@@ -33,14 +33,14 @@ try {
   if (isOpenAIQuotaError(error)) {
     console.error(
       [
-        "OpenAI API quota가 부족해서 구조화 출력 확인을 진행할 수 없습니다.",
+        "OpenAI API quota is insufficient, so the structured output check cannot continue.",
         "",
-        "확인할 것:",
-        "- OpenAI Platform billing/credits가 활성화되어 있는지",
-        "- .env의 OPENAI_API_KEY가 quota가 있는 project의 key인지",
-        "- ChatGPT Plus/Pro 구독과 OpenAI API credit은 별도인지",
+        "Check these items:",
+        "- OpenAI Platform billing/credits are active",
+        "- .env OPENAI_API_KEY belongs to a project with quota",
+        "- ChatGPT Plus/Pro and OpenAI API credits are separate",
         "",
-        "quota를 해결한 뒤 같은 명령을 다시 실행하세요:",
+        "After fixing quota, run the same command again:",
         `npm run check:openai -- ${readmePath}`,
       ].join("\n"),
     );
