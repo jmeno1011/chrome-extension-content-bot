@@ -5,6 +5,18 @@
       "destination": "/api/health"
     },
     {
+      "source": "/",
+      "destination": "/api/noop"
+    },
+    {
+      "source": "/favicon.ico",
+      "destination": "/api/noop"
+    },
+    {
+      "source": "/favicon.png",
+      "destination": "/api/noop"
+    },
+    {
       "source": "/api/slack/events",
       "destination": "/api/slack/events"
     }

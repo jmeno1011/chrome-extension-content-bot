@@ -8,6 +8,9 @@ describe("Vercel routing", () => {
     };
 
     expect(config.rewrites).toContainEqual({ source: "/health", destination: "/api/health" });
+    expect(config.rewrites).toContainEqual({ source: "/", destination: "/api/noop" });
+    expect(config.rewrites).toContainEqual({ source: "/favicon.ico", destination: "/api/noop" });
+    expect(config.rewrites).toContainEqual({ source: "/favicon.png", destination: "/api/noop" });
     expect(config.rewrites).toContainEqual({
       source: "/api/slack/events",
       destination: "/api/slack/events",
