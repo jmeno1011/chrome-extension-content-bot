@@ -1,5 +1,5 @@
 import fs from "node:fs/promises";
-import OpenAI from "openai";
+import { OpenAI } from "openai";
 import { loadConfig } from "../config.js";
 import { generateExtensionDraft } from "../openai/generate-extension-draft.js";
 

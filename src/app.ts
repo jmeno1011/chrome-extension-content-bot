@@ -1,5 +1,5 @@
 import express, { type Request } from "express";
-import OpenAI from "openai";
+import { OpenAI } from "openai";
 import { loadConfig } from "./config.js";
 import { createExtensionPullRequest } from "./github/create-extension-pr.js";
 import { generateExtensionDraft } from "./openai/generate-extension-draft.js";
