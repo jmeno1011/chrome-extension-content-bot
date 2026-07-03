@@ -95,12 +95,38 @@ describe("createExtensionPullRequest", () => {
       }),
     });
   });
+
+  it("includes the GitHub target when base branch lookup fails", async () => {
+    const fetch = vi.fn().mockResolvedValueOnce(
+      jsonResponse(
+        {
+          message: "Not Found",
+          documentation_url: "https://docs.github.com/rest/git/refs#get-a-reference",
+          status: "404",
+        },
+        404,
+      ),
+    );
+
+    await expect(
+      createExtensionPullRequest({
+        extension,
+        token: "ghp-token",
+        owner: "jmeno1011",
+        repo: "Doh-Chrome-Extensions-Hub",
+        baseBranch: "main",
+        fetch,
+      }),
+    ).rejects.toThrow(
+      'GitHub API request failed while reading base branch "main" in jmeno1011/Doh-Chrome-Extensions-Hub',
+    );
+  });
 });
 
-function jsonResponse(body: unknown) {
+function jsonResponse(body: unknown, status = 200) {
   return {
-    ok: true,
-    status: 200,
+    ok: status >= 200 && status < 300,
+    status,
     json: async () => body,
     text: async () => JSON.stringify(body),
   };

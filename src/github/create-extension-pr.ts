@@ -22,16 +22,23 @@ export async function createExtensionPullRequest(
   const fetchImpl = input.fetch ?? fetch;
   const branchName = input.branchName ?? createBranchName(input.extension.slug);
   const apiBase = `https://api.github.com/repos/${input.owner}/${input.repo}`;
+  const repoFullName = `${input.owner}/${input.repo}`;
 
   const baseRef = await githubJson<{ object: { sha: string } }>(
     fetchImpl,
     `${apiBase}/git/ref/heads/${input.baseBranch}`,
     input.token,
+    {
+      action: `reading base branch "${input.baseBranch}" in ${repoFullName}`,
+    },
   );
   const currentFile = await githubJson<{ content: string; sha: string }>(
     fetchImpl,
     `${apiBase}/contents/data/extensions.json?ref=${input.baseBranch}`,
     input.token,
+    {
+      action: `reading data/extensions.json from "${input.baseBranch}" in ${repoFullName}`,
+    },
   );
   const extensions = JSON.parse(decodeBase64(currentFile.content)) as Extension[];
 
@@ -49,6 +56,7 @@ export async function createExtensionPullRequest(
         ref: `refs/heads/${branchName}`,
         sha: baseRef.object.sha,
       },
+      action: `creating branch "${branchName}" in ${repoFullName}`,
     },
   );
 
@@ -65,6 +73,7 @@ export async function createExtensionPullRequest(
         sha: currentFile.sha,
         branch: branchName,
       },
+      action: `updating data/extensions.json on "${branchName}" in ${repoFullName}`,
     },
   );
 
@@ -80,6 +89,7 @@ export async function createExtensionPullRequest(
         base: input.baseBranch,
         body: `Adds ${input.extension.name} to Chrome Extensions Hub.`,
       },
+      action: `opening pull request from "${branchName}" to "${input.baseBranch}" in ${repoFullName}`,
     },
   );
 
@@ -90,7 +100,7 @@ async function githubJson<T = unknown>(
   fetchImpl: Fetch,
   url: string,
   token: string,
-  options: { method?: string; body?: unknown } = {},
+  options: { method?: string; body?: unknown; action?: string } = {},
 ): Promise<T> {
   const response = await fetchImpl(url, {
     method: options.method ?? "GET",
@@ -104,7 +114,8 @@ async function githubJson<T = unknown>(
   });
 
   if (!response.ok) {
-    throw new Error(`GitHub API request failed: ${response.status} ${await response.text()}`);
+    const action = options.action ? ` while ${options.action}` : "";
+    throw new Error(`GitHub API request failed${action}: ${response.status} ${await response.text()}`);
   }
 
   return (await response.json()) as T;
