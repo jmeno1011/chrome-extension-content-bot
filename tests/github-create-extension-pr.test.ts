@@ -121,6 +121,80 @@ describe("createExtensionPullRequest", () => {
       'GitHub API request failed while reading base branch "main" in jmeno1011/Doh-Chrome-Extensions-Hub',
     );
   });
+
+  it("enables auto-merge after creating a pull request when requested", async () => {
+    const existingExtensions = [
+      {
+        ...extension,
+        id: "existing-extension",
+        name: "Existing Extension",
+        slug: "existing-extension",
+        privacyPath: "/extensions/existing-extension/privacy",
+      },
+    ];
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ object: { sha: "base-sha" } }))
+      .mockResolvedValueOnce(jsonResponse({ content: encodeBase64(JSON.stringify(existingExtensions)), sha: "file-sha" }))
+      .mockResolvedValueOnce(jsonResponse({ ref: "refs/heads/content/new-extension" }))
+      .mockResolvedValueOnce(jsonResponse({ content: { path: "data/extensions.json" } }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          html_url: "https://github.com/example/extensions/pull/123",
+          node_id: "PR_node_id",
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: {
+            enablePullRequestAutoMerge: {
+              pullRequest: {
+                autoMergeRequest: {
+                  enabledAt: "2026-07-03T08:00:00Z",
+                },
+              },
+            },
+          },
+        }),
+      );
+
+    const result = await createExtensionPullRequest({
+      extension,
+      token: "ghp-token",
+      owner: "example",
+      repo: "extensions",
+      baseBranch: "main",
+      fetch,
+      branchName: "content/new-extension",
+      autoMerge: {
+        enabled: true,
+        mergeMethod: "SQUASH",
+      },
+    });
+
+    expect(result).toEqual({
+      url: "https://github.com/example/extensions/pull/123",
+      autoMergeEnabled: true,
+    });
+    expect(fetch).toHaveBeenCalledTimes(6);
+    expect(fetch.mock.calls[5][0]).toBe("https://api.github.com/graphql");
+    expect(fetch.mock.calls[5][1]).toMatchObject({
+      method: "POST",
+    });
+
+    const graphQlBody = JSON.parse(String(fetch.mock.calls[5][1]?.body)) as {
+      query: string;
+      variables: {
+        pullRequestId: string;
+        mergeMethod: string;
+      };
+    };
+    expect(graphQlBody.query).toContain("enablePullRequestAutoMerge");
+    expect(graphQlBody.variables).toEqual({
+      pullRequestId: "PR_node_id",
+      mergeMethod: "SQUASH",
+    });
+  });
 });
 
 function jsonResponse(body: unknown, status = 200) {

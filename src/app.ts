@@ -14,7 +14,7 @@ type AppDependencies = {
   slack?: SlackClient;
   verifySlackRequest?: (request: RequestWithRawBody) => boolean;
   generateDraft?: (readme: string) => Promise<AiOutput>;
-  createPullRequest?: (extension: Extension) => Promise<{ url: string }>;
+  createPullRequest?: (extension: Extension) => Promise<{ url: string; autoMergeEnabled?: boolean }>;
   commandTimeoutMs?: number;
 };
 
@@ -62,6 +62,10 @@ export function createApp(dependencies: AppDependencies = {}) {
         owner: config.githubOwner,
         repo: config.githubRepo,
         baseBranch: config.githubBaseBranch,
+        autoMerge: {
+          enabled: config.githubAutoMerge,
+          mergeMethod: config.githubAutoMergeMethod,
+        },
       });
     });
   const verifySlackRequest =
@@ -154,7 +158,7 @@ async function handleAppMention(input: {
   slack: SlackClient;
   draftContexts: Map<string, DraftContext>;
   generateDraft: (readme: string) => Promise<AiOutput>;
-  createPullRequest: (extension: Extension) => Promise<{ url: string }>;
+  createPullRequest: (extension: Extension) => Promise<{ url: string; autoMergeEnabled?: boolean }>;
   commandTimeoutMs: number;
 }) {
   const {
@@ -217,7 +221,7 @@ async function createCommandReply(input: {
   threadTs: string;
   draftContexts: Map<string, DraftContext>;
   generateDraft: (readme: string) => Promise<AiOutput>;
-  createPullRequest: (extension: Extension) => Promise<{ url: string }>;
+  createPullRequest: (extension: Extension) => Promise<{ url: string; autoMergeEnabled?: boolean }>;
 }): Promise<string> {
   const { command, request, threadTs, draftContexts, generateDraft, createPullRequest } = input;
 
@@ -498,7 +502,7 @@ function createPreviewReply(context: DraftContext | undefined): string {
 
 async function createApproveReply(
   context: DraftContext | undefined,
-  createPullRequest: (extension: Extension) => Promise<{ url: string }>,
+  createPullRequest: (extension: Extension) => Promise<{ url: string; autoMergeEnabled?: boolean }>,
 ): Promise<string> {
   if (!context) {
     return "No draft exists in this thread. Run `@bot generate` with a README first.";
@@ -516,14 +520,18 @@ async function createApproveReply(
 
   try {
     const pullRequest = await createPullRequest(result.data);
-    return [
+    const lines = [
       "Approval complete",
       "",
       "Created a GitHub PR.",
       pullRequest.url,
-      "",
-      formatDraftPreview(context.draft),
-    ].join("\n");
+    ];
+
+    if (pullRequest.autoMergeEnabled) {
+      lines.push("", "Auto-merge enabled. GitHub will merge this PR after required checks pass.");
+    }
+
+    return [...lines, "", formatDraftPreview(context.draft)].join("\n");
   } catch (error) {
     console.error("[github] pull request creation failed", error);
     return `Approval passed, but GitHub PR creation failed: ${getErrorMessage(error)}`;

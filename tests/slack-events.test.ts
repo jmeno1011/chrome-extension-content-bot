@@ -672,6 +672,56 @@ describe("Slack events endpoint", () => {
     );
   });
 
+  it("shows when auto-merge is enabled after approving a draft", async () => {
+    const postMessage = vi.fn().mockResolvedValue(undefined);
+    const generateDraft = vi.fn().mockResolvedValue(baseDraft);
+    const createPullRequest = vi.fn().mockResolvedValue({
+      url: "https://github.com/example/extensions/pull/123",
+      autoMergeEnabled: true,
+    });
+    const app = createApp({
+      slack: { postMessage },
+      verifySlackRequest: () => true,
+      generateDraft,
+      createPullRequest,
+    });
+
+    await request(app)
+      .post("/api/slack/events")
+      .send({
+        type: "event_callback",
+        event: {
+          type: "app_mention",
+          channel: "C123",
+          user: "U123",
+          text: "<@BOT> generate\n# My Extension\nREADME body",
+          ts: "1710000000.001150",
+        },
+      });
+    postMessage.mockClear();
+
+    const response = await request(app)
+      .post("/api/slack/events")
+      .send({
+        type: "event_callback",
+        event: {
+          type: "app_mention",
+          channel: "C123",
+          user: "U123",
+          text: "<@BOT> approve",
+          thread_ts: "1710000000.001150",
+          ts: "1710000000.001151",
+        },
+      });
+
+    expect(response.status).toBe(200);
+    expect(postMessage).toHaveBeenCalledWith({
+      channel: "C123",
+      thread_ts: "1710000000.001150",
+      text: expect.stringContaining("Auto-merge enabled"),
+    });
+  });
+
   it("rejects approval when category is missing", async () => {
     const postMessage = vi.fn().mockResolvedValue(undefined);
     const createPullRequest = vi.fn();

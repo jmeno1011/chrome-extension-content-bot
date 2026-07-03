@@ -10,10 +10,15 @@ export type CreateExtensionPullRequestInput = {
   baseBranch: string;
   fetch?: Fetch;
   branchName?: string;
+  autoMerge?: {
+    enabled: boolean;
+    mergeMethod: "MERGE" | "SQUASH" | "REBASE";
+  };
 };
 
 export type CreateExtensionPullRequestResult = {
   url: string;
+  autoMergeEnabled?: boolean;
 };
 
 export async function createExtensionPullRequest(
@@ -77,7 +82,7 @@ export async function createExtensionPullRequest(
     },
   );
 
-  const pullRequest = await githubJson<{ html_url: string }>(
+  const pullRequest = await githubJson<{ html_url: string; node_id: string }>(
     fetchImpl,
     `${apiBase}/pulls`,
     input.token,
@@ -93,7 +98,73 @@ export async function createExtensionPullRequest(
     },
   );
 
+  if (input.autoMerge?.enabled) {
+    await enablePullRequestAutoMerge({
+      fetchImpl,
+      token: input.token,
+      pullRequestId: pullRequest.node_id,
+      mergeMethod: input.autoMerge.mergeMethod,
+      repoFullName,
+    });
+
+    return { url: pullRequest.html_url, autoMergeEnabled: true };
+  }
+
   return { url: pullRequest.html_url };
+}
+
+async function enablePullRequestAutoMerge(input: {
+  fetchImpl: Fetch;
+  token: string;
+  pullRequestId: string;
+  mergeMethod: "MERGE" | "SQUASH" | "REBASE";
+  repoFullName: string;
+}) {
+  const query = `
+    mutation EnablePullRequestAutoMerge($pullRequestId: ID!, $mergeMethod: PullRequestMergeMethod!) {
+      enablePullRequestAutoMerge(input: {
+        pullRequestId: $pullRequestId,
+        mergeMethod: $mergeMethod
+      }) {
+        pullRequest {
+          autoMergeRequest {
+            enabledAt
+          }
+        }
+      }
+    }
+  `;
+
+  const response = await input.fetchImpl("https://api.github.com/graphql", {
+    method: "POST",
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${input.token}`,
+      "Content-Type": "application/json",
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+    body: JSON.stringify({
+      query,
+      variables: {
+        pullRequestId: input.pullRequestId,
+        mergeMethod: input.mergeMethod,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `GitHub auto-merge setup failed while enabling auto-merge in ${input.repoFullName}: ${response.status} ${await response.text()}`,
+    );
+  }
+
+  const result = (await response.json()) as { errors?: Array<{ message?: string }> };
+  if (result.errors?.length) {
+    const messages = result.errors.map((error) => error.message ?? "Unknown GraphQL error").join("; ");
+    throw new Error(
+      `GitHub auto-merge setup failed while enabling auto-merge in ${input.repoFullName}: ${messages}`,
+    );
+  }
 }
 
 async function githubJson<T = unknown>(

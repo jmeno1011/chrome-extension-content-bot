@@ -12,6 +12,8 @@ export type AppConfig = {
   githubOwner?: string;
   githubRepo?: string;
   githubBaseBranch: string;
+  githubAutoMerge: boolean;
+  githubAutoMergeMethod: "MERGE" | "SQUASH" | "REBASE";
 };
 
 export function loadConfig(env = process.env): AppConfig {
@@ -27,5 +29,15 @@ export function loadConfig(env = process.env): AppConfig {
     githubOwner: env.GITHUB_OWNER,
     githubRepo: env.GITHUB_REPO,
     githubBaseBranch: env.GITHUB_BASE_BRANCH ?? "main",
+    githubAutoMerge: env.GITHUB_AUTO_MERGE === "true",
+    githubAutoMergeMethod: parseAutoMergeMethod(env.GITHUB_AUTO_MERGE_METHOD),
   };
+}
+
+function parseAutoMergeMethod(value: string | undefined): "MERGE" | "SQUASH" | "REBASE" {
+  if (value === "MERGE" || value === "SQUASH" || value === "REBASE") {
+    return value;
+  }
+
+  return "SQUASH";
 }

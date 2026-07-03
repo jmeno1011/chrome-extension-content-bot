@@ -123,9 +123,13 @@ GITHUB_TOKEN=
 GITHUB_OWNER=
 GITHUB_REPO=doh-kim-chrome-extensions
 GITHUB_BASE_BRANCH=main
+GITHUB_AUTO_MERGE=false
+GITHUB_AUTO_MERGE_METHOD=SQUASH
 ```
 
 The GitHub token needs contents write and pull request write permissions for the target repository.
+
+Set `GITHUB_AUTO_MERGE=true` to enable GitHub auto-merge after the PR is created. The repository must have `Allow auto-merge` enabled, and GitHub will merge only after required checks pass.
 
 ## OpenAI CLI Check
 
