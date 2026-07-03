@@ -129,6 +129,68 @@ describe("Slack events endpoint", () => {
     expect(postMessage.mock.calls[0][0].text).toContain("Is there a Chrome Web Store URL?");
   });
 
+  it("reports generate failures to the Slack thread", async () => {
+    const postMessage = vi.fn().mockResolvedValue(undefined);
+    const generateDraft = vi.fn().mockRejectedValue(new Error("OpenAI failed"));
+    const app = createApp({
+      slack: { postMessage },
+      verifySlackRequest: () => true,
+      generateDraft,
+    });
+
+    const response = await request(app)
+      .post("/api/slack/events")
+      .send({
+        type: "event_callback",
+        event: {
+          type: "app_mention",
+          channel: "C123",
+          user: "U123",
+          text: "<@BOT> generate\n# My Extension\nREADME body",
+          ts: "1710000000.000210",
+        },
+      });
+
+    expect(response.status).toBe(200);
+    expect(postMessage).toHaveBeenCalledWith({
+      channel: "C123",
+      thread_ts: "1710000000.000210",
+      text: expect.stringContaining("Command failed"),
+    });
+    expect(postMessage.mock.calls[0][0].text).toContain("OpenAI failed");
+  });
+
+  it("reports command timeout to the Slack thread", async () => {
+    const postMessage = vi.fn().mockResolvedValue(undefined);
+    const generateDraft = vi.fn(() => new Promise<typeof baseDraft>(() => undefined));
+    const app = createApp({
+      slack: { postMessage },
+      verifySlackRequest: () => true,
+      generateDraft,
+      commandTimeoutMs: 1,
+    });
+
+    const response = await request(app)
+      .post("/api/slack/events")
+      .send({
+        type: "event_callback",
+        event: {
+          type: "app_mention",
+          channel: "C123",
+          user: "U123",
+          text: "<@BOT> generate\n# My Extension\nREADME body",
+          ts: "1710000000.000220",
+        },
+      });
+
+    expect(response.status).toBe(200);
+    expect(postMessage).toHaveBeenCalledWith({
+      channel: "C123",
+      thread_ts: "1710000000.000220",
+      text: expect.stringContaining("Command timed out"),
+    });
+  });
+
   it("shows command help with /h", async () => {
     const postMessage = vi.fn().mockResolvedValue(undefined);
     const app = createApp({
@@ -665,6 +727,53 @@ describe("Slack events endpoint", () => {
       text: expect.stringContaining("Cannot approve"),
     });
     expect(postMessage.mock.calls[0][0].text).toContain("category");
+  });
+
+  it("reports GitHub PR creation failures when approval passes", async () => {
+    const postMessage = vi.fn().mockResolvedValue(undefined);
+    const generateDraft = vi.fn().mockResolvedValue(baseDraft);
+    const createPullRequest = vi.fn().mockRejectedValue(new Error("GitHub token rejected"));
+    const app = createApp({
+      slack: { postMessage },
+      verifySlackRequest: () => true,
+      generateDraft,
+      createPullRequest,
+    });
+
+    await request(app)
+      .post("/api/slack/events")
+      .send({
+        type: "event_callback",
+        event: {
+          type: "app_mention",
+          channel: "C123",
+          user: "U123",
+          text: "<@BOT> generate\n# My Extension\nREADME body",
+          ts: "1710000000.001300",
+        },
+      });
+    postMessage.mockClear();
+
+    const response = await request(app)
+      .post("/api/slack/events")
+      .send({
+        type: "event_callback",
+        event: {
+          type: "app_mention",
+          channel: "C123",
+          user: "U123",
+          text: "<@BOT> approve",
+          thread_ts: "1710000000.001300",
+          ts: "1710000000.001301",
+        },
+      });
+
+    expect(response.status).toBe(200);
+    expect(postMessage).toHaveBeenCalledWith({
+      channel: "C123",
+      thread_ts: "1710000000.001300",
+      text: expect.stringContaining("GitHub PR creation failed: GitHub token rejected"),
+    });
   });
 
   it("asks for README content when generate command is empty", async () => {

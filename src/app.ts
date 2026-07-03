@@ -1,4 +1,5 @@
 import express, { type Request } from "express";
+import { waitUntil } from "@vercel/functions";
 import { loadConfig } from "./config.js";
 import type { AiOutput } from "./schema/ai-output.schema.js";
 import { extensionSchema, type Extension } from "./schema/extension.schema.js";
@@ -14,6 +15,7 @@ type AppDependencies = {
   verifySlackRequest?: (request: RequestWithRawBody) => boolean;
   generateDraft?: (readme: string) => Promise<AiOutput>;
   createPullRequest?: (extension: Extension) => Promise<{ url: string }>;
+  commandTimeoutMs?: number;
 };
 
 type DraftContext = {
@@ -23,6 +25,7 @@ type DraftContext = {
 
 export function createApp(dependencies: AppDependencies = {}) {
   const config = loadConfig();
+  const commandTimeoutMs = dependencies.commandTimeoutMs ?? config.commandTimeoutMs;
   const draftContexts = new Map<string, DraftContext>();
   const slack = dependencies.slack ?? createSlackClient(config.slackBotToken);
   const generateDraft =
@@ -105,40 +108,93 @@ export function createApp(dependencies: AppDependencies = {}) {
       return;
     }
 
-    response.json({ ok: true });
-
     if (body.type !== "event_callback" || body.event?.type !== "app_mention") {
+      response.json({ ok: true });
       return;
     }
 
     const command = parseMentionCommand(body.event.text ?? "");
     const threadTs = body.event.thread_ts ?? body.event.ts;
+    console.log("[slack] command parsed", {
+      command: command.name,
+      hasArgument: command.argument.length > 0,
+      threadTs,
+    });
 
-    try {
-      const text = await createCommandReply({
+    const task = handleAppMention({
+      command,
+      request,
+      threadTs,
+      channel: body.event.channel,
+      slack,
+      draftContexts,
+      generateDraft,
+      createPullRequest,
+      commandTimeoutMs,
+    });
+
+    if (process.env.VERCEL) {
+      waitUntil(task);
+      response.json({ ok: true });
+      return;
+    }
+
+    await task;
+    response.json({ ok: true });
+  });
+
+  return app;
+}
+
+async function handleAppMention(input: {
+  command: { name: string; argument: string };
+  request: RequestWithRawBody;
+  threadTs: string;
+  channel: string;
+  slack: SlackClient;
+  draftContexts: Map<string, DraftContext>;
+  generateDraft: (readme: string) => Promise<AiOutput>;
+  createPullRequest: (extension: Extension) => Promise<{ url: string }>;
+  commandTimeoutMs: number;
+}) {
+  const {
+    command,
+    request,
+    threadTs,
+    channel,
+    slack,
+    draftContexts,
+    generateDraft,
+    createPullRequest,
+    commandTimeoutMs,
+  } = input;
+
+  try {
+    const text = await withTimeout(
+      createCommandReply({
         command,
         request,
         threadTs,
         draftContexts,
         generateDraft,
         createPullRequest,
-      });
+      }),
+      commandTimeoutMs,
+    );
 
-      await slack.postMessage({
-        channel: body.event.channel,
-        text,
-        thread_ts: threadTs,
-      });
-      console.log("[slack] reply sent", {
-        channel: body.event.channel,
-        thread_ts: threadTs,
-      });
-    } catch (error) {
-      console.error("[slack] reply failed", error);
-    }
-  });
-
-  return app;
+    await slack.postMessage({
+      channel,
+      text,
+      thread_ts: threadTs,
+    });
+    console.log("[slack] reply sent", {
+      channel,
+      thread_ts: threadTs,
+    });
+  } catch (error) {
+    console.error("[slack] reply failed", error);
+    await postFailureMessage({ slack, channel, threadTs, error });
+  }
 }
 
 function parseMentionCommand(text: string): { name: string; argument: string } {
@@ -272,8 +328,56 @@ async function createGenerateReply(
     return formatDraftPreview(draft);
   } catch (error) {
     console.error("[slack] generate failed", error);
-    return "Failed to generate structured data. Check the server logs.";
+    throw error;
   }
+}
+
+async function postFailureMessage(input: {
+  slack: SlackClient;
+  channel: string;
+  threadTs: string;
+  error: unknown;
+}) {
+  const { slack, channel, threadTs, error } = input;
+  const message =
+    error instanceof CommandTimeoutError
+      ? `Command timed out after ${error.timeoutMs}ms. Please try again with a shorter README or retry later.`
+      : `Command failed: ${getErrorMessage(error)}`;
+
+  try {
+    await slack.postMessage({
+      channel,
+      thread_ts: threadTs,
+      text: message,
+    });
+    console.log("[slack] failure reply sent", { channel, thread_ts: threadTs });
+  } catch (postError) {
+    console.error("[slack] failure reply failed", postError);
+  }
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout>;
+
+  const timeoutPromise = new Promise<never>((_resolve, reject) => {
+    timeout = setTimeout(() => reject(new CommandTimeoutError(timeoutMs)), timeoutMs);
+  });
+
+  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timeout));
+}
+
+class CommandTimeoutError extends Error {
+  constructor(readonly timeoutMs: number) {
+    super("Command timed out");
+  }
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return "Unknown error";
 }
 
 function createHelpReply(): string {
@@ -422,7 +526,7 @@ async function createApproveReply(
     ].join("\n");
   } catch (error) {
     console.error("[github] pull request creation failed", error);
-    return "Approval passed, but GitHub PR creation failed. Check server logs and GitHub environment variables.";
+    return `Approval passed, but GitHub PR creation failed: ${getErrorMessage(error)}`;
   }
 }
 

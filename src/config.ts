@@ -2,6 +2,7 @@ import "dotenv/config";
 
 export type AppConfig = {
   port: number;
+  commandTimeoutMs: number;
   slackBotToken?: string;
   slackSigningSecret?: string;
   openaiApiKey?: string;
@@ -16,6 +17,7 @@ export type AppConfig = {
 export function loadConfig(env = process.env): AppConfig {
   return {
     port: Number(env.PORT ?? 3000),
+    commandTimeoutMs: Number(env.COMMAND_TIMEOUT_MS ?? 8_000),
     slackBotToken: env.SLACK_BOT_TOKEN,
     slackSigningSecret: env.SLACK_SIGNING_SECRET,
     openaiApiKey: env.OPENAI_API_KEY,
